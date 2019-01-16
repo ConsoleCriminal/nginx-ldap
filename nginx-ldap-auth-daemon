@@ -13,8 +13,12 @@ from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 # Requests are processed in separate thread
 import threading
 from SocketServer import ThreadingMixIn
+
+
 class AuthHTTPServer(ThreadingMixIn, HTTPServer):
     pass
+
+
 # -----------------------------------------------------------------------------
 # Requests are processed in separate process
 # from SocketServer import ForkingMixIn
@@ -34,18 +38,21 @@ conf = {}
 def read_conf(fname):
     """read file in pam_ldap format"""
     global conf
-    opts = ['host', 'base', 'binddn', 'bindpw', 'ssl']
+    mandatory_opts = ['host', 'base', 'binddn', 'bindpw', 'ssl']
+    optional_opts = []
+    config_opts = mandatory_opts + optional_opts
     try:
         with open(fname) as f:
             for line in f:
                 data = line.strip().split()
-                if len(data) > 1 and data[0] in opts:
+                if len(data) > 1 and data[0] in config_opts:
                     conf[data[0]] = ' '.join(data[1:])
+
     except:
         print "Unable to read {} as uid {}: {}".format(fname, os.getuid(), sys.exc_info())
         sys.exit(1)
 
-    for o in opts[:4]:
+    for o in mandatory_opts[:4]:
         if o not in conf:
             print "Mandatory parameter '{}' was not found in config file {}!".format(o, fname)
             sys.exit(1)
@@ -77,7 +84,8 @@ def check_auth(user, passwd, allowusr, allowgr):
             ldap_connection.set_option(ldap.OPT_REFERRALS, 0)  # MS AD
             ldap_connection.set_option(ldap.OPT_NETWORK_TIMEOUT, 3)
             ldap_connection.simple_bind_s(conf['binddn'], conf['bindpw'])
-            data = ldap_connection.search_s(base=conf['base'], scope=ldap.SCOPE_SUBTREE, filterstr='(&(objectClass=user)(sAMAccountName=' + user + '))')
+            data = ldap_connection.search_s(
+                base=conf['base'], scope=ldap.SCOPE_SUBTREE, filterstr='(&(objectClass=user)(sAMAccountName=' + user + '))')
             if data:
                 data = data[0][1]
                 # check password
@@ -132,8 +140,10 @@ class LDAPAuthHandler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="""Simple Nginx LDAP authentication helper.""")
     parser.add_argument('--host', default="localhost", help="host to bind (Default: localhost)")
-    parser.add_argument('-p', '--port', type=int, default=8888, help="port to bind (Default: 8888)")
-    parser.add_argument('-c', '--config', default='/etc/pam_ldap.conf', help="config with LDAP creds (Default: /etc/pam_ldap.conf)")
+    parser.add_argument('-p', '--port', type=int, default=8888,
+                        help="port to bind (Default: 8888)")
+    parser.add_argument('-c', '--config', default='/etc/pam_ldap.conf',
+                        help="config with LDAP creds (Default: /etc/pam_ldap.conf)")
     args = parser.parse_args()
 
     read_conf(args.config)
